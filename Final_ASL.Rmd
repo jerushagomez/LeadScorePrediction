@@ -1,0 +1,345 @@
+---
+title: "Final_ASL"
+author: "21BDA07, 21BDA11, 21BDA54"
+date: "05/07/2022"
+output: pdf_document
+---
+ ADVANCED STATISTICS LAB PROJECT 
+ SEMESTER 2
+ MSC. BIG DATA ANALYTICS 
+ _______________________________________________________
+ Angel Philip - 21BDA07
+ Jerusha Gomez - 21BDA11
+ Lakshitha Sethi - 21BDA54
+ 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. Importing the required libraries:
+
+```{r}
+library(dplyr)
+library(funModeling)
+library(Hmisc)
+library(ggplot2)
+library(scales)
+library(RColorBrewer)
+library(party)
+library(InformationValue)
+library(pROC)
+```
+
+2. Loading the data:
+
+```{r}
+dataset <- read.csv("LeadScoring.csv")
+dim(dataset)
+```
+
+3. Taking a look at the data:
+
+```{r}
+ncol(dataset)
+nrow(dataset)
+summary(dataset)
+str(dataset)
+```
+
+4. Data Cleaning
+
+```{r}
+#Filling the missing values with NA
+dataset[dataset == ""] <- NA 
+
+#Finding the total number of missing values
+sum(is.na(dataset))
+
+#Finding the missing value count per column
+sapply(dataset, function(x) sum(is.na(x)))
+
+#Narrowing data down to just Indian Leads
+ind_data <- dataset[dataset$Country == 'India',]
+
+#Removing the entries with country as NA
+new_data <- subset(ind_data,!is.na(ind_data$Country))
+
+#Keeping the converted value as character for further visualizations.
+new_data$Converted <- as.factor(new_data$Converted)
+View(new_data)
+#Removing unnecessary columns
+new_data_1 <- new_data[-c(1,16:24,27,28,35,36)]
+View(new_data_1)
+
+#Imputation of missing numerical values
+new_data_1$Asymmetrique.Activity.Score[is.na(new_data_1$Asymmetrique.Activity.Score)]<-mean(new_data_1$Asymmetrique.Activity.Score,na.rm=TRUE)
+new_data_1$Asymmetrique.Profile.Score[is.na(new_data_1$Asymmetrique.Profile.Score)]<-mean(new_data_1$Asymmetrique.Profile.Score,na.rm=TRUE)
+
+#Renaming Column Names
+new_data_1 <- rename(new_data_1, Time.on.Web=Total.Time.Spent.on.Website)
+new_data_1 <- rename(new_data_1, Hear.About=How.did.you.hear.about.X.Education)
+new_data_1 <- rename(new_data_1, Occupation=What.is.your.current.occupation)
+
+#Cleaning the Specialization Column
+dplyr::count(new_data_1, new_data_1$Specialization, sort = TRUE)
+
+#Imputing with random values of the same column
+new_data_1$Specialization <- with(new_data_1,impute(new_data_1$Specialization,"random"))
+new_data_1$Hear.About <- with(new_data_1,impute(new_data_1$Hear.About,"random"))
+new_data_1$Occupation <- with(new_data_1,impute(new_data_1$Occupation,"random"))
+new_data_1$Tags <- with(new_data_1,impute(new_data_1$Tags,"random"))
+new_data_1$Lead.Quality <- with(new_data_1,impute(new_data_1$Lead.Quality,"random"))
+new_data_1$Lead.Profile <- with(new_data_1,impute(new_data_1$Lead.Profile,"random"))
+new_data_1$City <- with(new_data_1,impute(new_data_1$City,"random"))
+new_data_1$Asymmetrique.Activity.Index <- with(new_data_1,impute(new_data_1$Asymmetrique.Activity.Index,"random"))
+new_data_1$Asymmetrique.Profile.Index <- with(new_data_1,impute(new_data_1$Asymmetrique.Profile.Index,"random"))
+
+new_data_1 <- subset(new_data_1,!is.na(new_data_1$Lead.Source))
+```
+
+
+5. Exploratory Data Analysis
+
+```{r}
+#Snapshot of the data
+glimpse(new_data_1)
+status(new_data_1)
+```
+```{r}
+#1.Percentage of Converted
+conv <- new_data_1 %>% 
+  group_by(new_data_1$Converted) %>% # Variable to be transformed
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(perc) %>%
+  mutate(labels = scales::percent(perc))
+conv
+conv <- rename(conv, Conversion.Rate = `new_data_1$Converted`)
+plot1 <- ggplot(conv, aes(x = "", y = perc, fill = factor(Conversion.Rate))) +
+  geom_col() + geom_text(aes(label = labels),position = position_stack(vjust = 0.5)) +
+  coord_polar(theta = "y")+ylab("") + ggtitle("Percentage of Conversion") + theme(plot.title = element_text(hjust = 0.5))+ guides(fill=guide_legend(title=""))+ scale_fill_discrete( labels = c("Not Converted", "Converted"))
+plot1
+```
+```{r}
+#2. Lead Source Distribution
+lead_source <- new_data_1 %>% 
+  group_by(new_data_1$Lead.Source) %>% # Variable to be transformed
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(perc) %>%
+  mutate(labels = scales::percent(perc))           
+lead_source <- rename(lead_source, Lead_Source = `new_data_1$Lead.Source`)
+ls_2 <- head(arrange(lead_source,desc(lead_source$perc)), n = 5)
+
+plot2 <- ggplot(data=ls_2, aes(x=reorder(Lead_Source,-perc), y=perc)) +
+  geom_bar(stat="identity", color="black", fill="#C77CFF")+ ggtitle("Top 5 Lead Sources")+ theme(plot.title = element_text(hjust = 0.5))
+plot2 <- plot2+geom_text(aes(label = labels),position = position_stack(vjust = 0.5))+xlab("Lead Source")+ylab("Percentage")
+plot2
+```
+```{r}
+#3. Average Time Spent On the Web 
+max(new_data_1$Time.on.Web)
+min(new_data_1$Time.on.Web)
+mean(new_data_1$Time.on.Web)
+median(new_data_1$Time.on.Web)
+quantile(new_data_1$Time.on.Web)
+#Conclusion - 10 minutes is the average time spent on the website
+plot3 <- ggplot(new_data_1, aes(x = 1, y = Time.on.Web)) + geom_boxplot(position = position_dodge(preserve = "single"),fill='#CC9999', color="black") +
+  xlab(NULL) + theme(axis.text.y = element_blank()) + coord_flip(ylim=c(0, 1400)) 
+plot3 <- plot3 + ggtitle("Time Spent on the Website")+ theme(plot.title = element_text(hjust = 0.5))+ylab("Time (in seconds)")
+plot3
+```
+```{r}
+#4. Total visits to the website.
+mean_visits <- mean(new_data_1$TotalVisits)
+mean_visits
+#Conclusion - there is an average of 4-5 visits per person
+
+plot4 <- ggplot(new_data_1, aes(x=TotalVisits)) + 
+  geom_histogram(binwidth=1,color="black", fill="grey") + xlim(0,30) 
+plot4
+```
+```{r}
+#5. Lead Origin Distribution
+lead_og <- new_data_1 %>% 
+  group_by(new_data_1$Lead.Origin) %>% # Variable to be transformed
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(perc) %>%
+  mutate(labels = scales::percent(perc))     
+lead_og <- head(arrange(lead_og,desc(lead_og$perc)))
+lead_og
+plot5 <- ggplot(data=lead_og, aes(x=`new_data_1$Lead.Origin`, y=perc)) +
+  geom_bar(stat="identity", color="blue", fill="blue")
+plot5
+#Conclusion - Landing page submission accounts for 70% of the leads.
+```
+```{r}
+#6. Last Activity
+last_act <- new_data_1 %>% 
+  group_by(new_data_1$Last.Activity) %>% # Variable to be transformed
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(perc) %>%
+  mutate(labels = scales::percent(perc))     
+last_act <- head(arrange(last_act,desc(last_act$perc)))
+plot6 <- ggplot(data=last_act, aes(x=`new_data_1$Last.Activity`, y=perc)) +
+  geom_bar(stat="identity", color="black", fill="black") + theme(axis.text.x = element_text(angle = 90))
+plot6
+#Conclusion - Email opened and SMS sent are the leading last activities.
+```
+```{r}
+#7. Occupation
+occu_table <-  new_data_1 %>% count(new_data_1$Occupation)
+occu_table
+plot7 <- ggplot(data=occu_table, aes(x=`new_data_1$Occupation`, y=n)) +
+  geom_bar(stat="identity", color="blue", fill="blue") + scale_x_discrete()
+plot7
+```
+```{r}
+#8. Lead Origin and Converted Count
+temp_tab <- new_data_1 %>% group_by(new_data_1$Lead.Origin,new_data_1$Converted) %>% summarise(sum_conv = n(),groups=NULL)
+temp_tab
+plot8 <- ggplot(temp_tab, aes(fill =`new_data_1$Converted`,group = `new_data_1$Converted`, y=sum_conv, x=`new_data_1$Lead.Origin`)) + 
+  geom_bar(position="dodge", stat="identity")
+plot8 <- plot8 + ylab("Number of Conversion") + xlab("Lead Origin")+ scale_fill_manual(values = c("#800000","#f5f5f5"))+theme_dark()
+plot8
+```
+```{r}
+# Lead Source and Converted
+plot9 <- ggplot(new_data_1, aes(fill =Converted,group = Converted, y=TotalVisits, x=Lead.Source)) + 
+  geom_bar(position="dodge", stat="identity") + theme(axis.text.x = element_text(angle = 90))
+plot9
+
+plot10 <- ggplot(new_data_1, aes(fill =Converted,group = Converted, y=Time.on.Web, x=Lead.Source)) + 
+  geom_bar(position="dodge", stat="identity") + theme(axis.text.x = element_text(angle = 90))+ scale_x_discrete()+scale_fill_manual(values = c("#054C70","#05C3DE"))
+plot10
+
+plot11 <- ggplot(new_data_1, aes(fill =Lead.Origin,group = Lead.Origin, y=Time.on.Web, x=Converted)) + 
+  geom_bar(position="dodge", stat="identity") + theme(axis.text.x = element_text(angle = 0))
+plot11
+
+plot12 <- ggplot(new_data_1, aes(fill = Converted,group = Converted, y=TotalVisits, x=Hear.About)) + 
+  geom_bar(position="dodge", stat="identity") + theme(axis.text.x = element_text(angle = 90)) + scale_x_discrete()
+plot12
+
+plot13 <- ggplot(new_data_1, aes(fill = Converted,group = Converted, y=TotalVisits, x=Occupation)) + 
+  geom_bar(position="dodge", stat="identity") + theme(axis.text.x = element_text(angle = 90)) + scale_x_discrete()+scale_fill_manual(values = c("#054C70","#05C3DE"))
+plot13
+
+plot14 <- ggplot(new_data_1, aes(fill = Converted,group = Converted, y=TotalVisits, x=Specialization)) + 
+  geom_bar(position="dodge", stat="identity") + theme(axis.text.x = element_text(angle = 90)) + scale_x_discrete()
+plot14
+
+plot15 <- ggplot(new_data_1,aes(Specialization)) + geom_bar() + scale_x_discrete() + theme(axis.text.x = element_text(angle = 90))
+plot15
+
+plot16 <- ggplot(new_data_1, aes(fill = Lead.Origin,group = Lead.Origin, y=TotalVisits, x=Last.Activity)) + 
+  geom_bar(position="dodge", stat="identity") + theme(axis.text.x = element_text(angle = 90)) + scale_x_discrete()
+plot16
+```
+6. Modelling the Data
+a) Checking for correlations
+
+```{r}
+# Performing chi square test for checking dependency of categorical variables.
+chisq.test(new_data_1$Converted,new_data_1$Lead.Origin)
+chisq.test(new_data_1$Converted,new_data_1$Lead.Source)
+chisq.test(new_data_1$Converted,new_data_1$Do.Not.Email)
+# seems to be highly correlated
+chisq.test(new_data_1$Converted,new_data_1$Do.Not.Call)
+# not at all correlated to the dependent variable
+chisq.test(new_data_1$Converted,new_data_1$Specialization)
+chisq.test(new_data_1$Converted,new_data_1$Hear.About)
+chisq.test(new_data_1$Converted,new_data_1$Occupation)
+#highly correlated
+chisq.test(new_data_1$Converted,new_data_1$Lead.Profile)
+#highly correlated
+chisq.test(new_data_1$Converted,new_data_1$Tags)
+#highly related
+chisq.test(new_data_1$Converted,new_data_1$City)
+chisq.test(new_data_1$Converted,new_data_1$Asymmetrique.Activity.Index)
+chisq.test(new_data_1$Converted,new_data_1$Asymmetrique.Profile.Index)
+#correlated to some extent
+chisq.test(new_data_1$Converted,new_data_1$Last.Notable.Activity)
+#highly correlated
+chisq.test(new_data_1$Converted,new_data_1$Tags)
+#highly correlated
+chisq.test(new_data_1$Converted,new_data_1$Lead.Quality)
+#highly correlated
+```
+
+b) Splitting data into test and train
+
+```{r}
+Sample <- sample(c(TRUE, FALSE), nrow(new_data_1), replace=TRUE, prob=c(0.7,0.3))
+train <- new_data_1[Sample, ]
+test <- new_data_1[!Sample, ] 
+```
+
+c) Fitting a Linear Regression Model
+
+```{r}
+#Linear Regression
+#Creating the model
+new_data_1$Converted <- as.numeric(as.character(new_data_1$Converted))
+linear_model<-lm(Converted ~ Do.Not.Email+Occupation+Lead.Profile+Tags+Lead.Quality+Last.Notable.Activity, data = new_data_1)
+
+#Visualizing the model
+par(mfrow=c(2,2))
+plot(linear_model)
+par(mfrow=c(1,1))
+#Viewing results
+anova(linear_model)
+summary(linear_model)
+```
+d) Predicting using the model:
+
+```{r}
+new_data_1$Lead.Score<- round((predict(linear_model)*100),0)
+View(new_data_1)
+```
+
+e) Cleaning up some values to avoid confusion:
+
+```{r}
+#Checking the boundaries
+max(new_data_1$Lead.Score)
+min(new_data_1$Lead.Score)
+
+#Computing median 
+median(new_data_1$Lead.Score)
+
+new_data_1$Lead.Score[new_data_1$Lead.Score < 0 ] <- 0 
+new_data_1$Lead.Score[new_data_1$Lead.Score > 100] <- 100
+```
+
+f) Encoding the Lead Score into Hot and Cold leads:
+
+```{r}
+#Creating a column called Lead.Type
+new_data_1$Lead.Type[new_data_1$Lead.Score <= 50] = 0
+new_data_1$Lead.Type[new_data_1$Lead.Score > 50] = 1
+
+```
+
+g) Testing the model:
+
+```{r}
+error_value <- optimalCutoff(new_data_1$Converted, new_data_1$Lead.Type)[1]
+error_value
+```
+7. Logistic Regression 
+
+```{r}
+lr_model <- glm(Lead.Type ~ Lead.Score, family=binomial(logit), data=new_data_1)
+summary(lr_model)
+View(new_data_1)
+```
+
+Thank you!
+__________________________________________________________________________
