@@ -5,9 +5,9 @@ The targeted clients are the ones with a higher lead score. Lead score in turn i
 The data collected for the purpose of this project is of a sample company called ‘X Education’. This company is basically a marketplace for courses targeted at industrial professionals. The company markets its courses on various search engines and social media platforms. The current conversion rate of X Education is thirty percent. This means that of all the leads gained, only thirty percent of them are getting converted into clients, in turn meaning that seventy percent of the leads were not converted to clients. One can see the proportion of wasted efforts in this situation. If the company continues with these numbers, it could be deleterious to the financial state of the company. The aim of this project is to identify target hot leads and thereby increase the conversion rate of the company while streamlining their efforts.
 
 ## Problem Statement
-▪ To build a model to predict lead scores.
-▪ To build a model to classify leads as either a ‘hot’ or ‘cold’ lead.
-▪ To increase the efficiency of the company by allowing them to recognise higher potential leads and in so doing streamline efforts for greater returns.
+- To build a model to predict lead scores.
+- To build a model to classify leads as either a ‘hot’ or ‘cold’ lead.
+- To increase the efficiency of the company by allowing them to recognise higher potential leads and in so doing streamline efforts for greater returns.
 
 ## About the Data 
 The dataset used for this project is termed as “Lead Scoring” and was sourced from Kaggle. [Link for the same - https://www.kaggle.com/code/ashydv/lead-scoring-logistic-regression/notebook]
